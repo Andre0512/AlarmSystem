@@ -1,3 +1,4 @@
 .idea/
 venv/
 secrets.py
+__pycache__/

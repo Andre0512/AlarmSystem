@@ -1,5 +1,3 @@
-from pprint import pprint
-
 import requests
 
 from secrets import API_KEY, GATEWAY
@@ -7,23 +5,33 @@ from secrets import API_KEY, GATEWAY
 URL = "http://{}/api/{}/sensors"
 
 
-def get_sensors():
-    r = requests.get(URL.format(GATEWAY, API_KEY))
-    return r.json()
+class Sensor:
+    def __init__(self, sensor_type):
+        self.__type = sensor_type
+        self.__sensors = self.__get_models()
+
+    def __get_sensors(self):
+        r = requests.get(URL.format(GATEWAY, API_KEY))
+        return r.json()
+
+    def __get_models(self):
+        return {k: v for k, v in self.__get_sensors().items() if v["modelid"] in self.__type}
+
+    def __get_state(self):
+        return {v['name']: v['state']['open'] for k, v in self.__sensors.items()}
+
+    def get_list(self):
+        return self.__get_state()
 
 
-def get_models(sensors, sensor_type):
-    return {k: v for k, v in sensors.items() if v["modelid"] in sensor_type}
-
-
-def xxx(magnets):
-    for k, v in magnets.items():
-        print(v['name'], v['state']['open'])
+class Magnet(Sensor):
+    def __init__(self):
+        super().__init__(["lumi.sensor_magnet.aq2"])
 
 
 def main():
-    sensors = get_sensors()
-    pprint(xxx(get_models(sensors, ["lumi.sensor_magnet.aq2"])))
+    magnet = Magnet()
+    print(magnet.get_list())
 
 
 if __name__ == "__main__":
