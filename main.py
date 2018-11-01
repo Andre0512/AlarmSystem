@@ -78,6 +78,8 @@ def main():
     db = get_db()
     old = get_last_state(db, magnets)
     while True:
+        sleep(0.5)
+        magnets = magnet.get_list()
         for sensor in magnets:
             if not magnets[sensor]['state'] == old[sensor]['state']:
                 db.logs.insert_one({'mac': sensor, 'state': magnets[sensor]['state'],
@@ -85,9 +87,7 @@ def main():
                                                                    "%Y-%m-%dT%H:%M:%S")})
                 logging.info("{} - {} - {}".format(magnets[sensor]['lastupdated'], sensor,
                                                    "geöffnet" if magnets[sensor]["state"] else "geschlossen"))
-            old = magnets
-            sleep(0.5)
-            magnets = magnet.get_list()
+        old = magnets
 
 
 if __name__ == "__main__":
