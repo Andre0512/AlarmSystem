@@ -6,7 +6,7 @@ from time import sleep
 import requests
 from pymongo import MongoClient
 
-from secrets import API_KEY, GATEWAY
+from secrets import API_KEY, GATEWAY, MONGO
 
 URL = "http://{}/api/{}/sensors"
 
@@ -39,46 +39,37 @@ class Magnet(Sensor):
         super().__init__(["lumi.sensor_magnet.aq2"])
 
 
+def get_last(db):
+    return db.logs.aggregate(
+        [
+            {'$sort': {'mac': 1, 'timestamp': 1}},
+            {
+                '$group':
+                    {
+                        '_id': '$mac',
+                        'last': {'$last': '$$ROOT'}
+                    }
+            }
+        ]
+    )
+
+
 def get_last_state(db, new):
     x = {}
-    for sensor in db.sensors.find({}):
+    for sensor in get_last(db):
         x[sensor['_id']] = {}
-        if 'current' in sensor:
-            x[sensor['_id']]['state'] = sensor['current']
-        elif sensor['_id'] in new:
-            x[sensor['_id']]['state'] = new[sensor['_id']]['state']
+        x[sensor['_id']]['state'] = sensor['last']['state']
     for sensor, value in new.items():
         if sensor not in x:
-            db.sensors.insert_one({"_id": sensor})
+            if not db.sensors.count_documents({"_id": sensor}):
+                db.sensors.insert_one({"_id": sensor})
             x[sensor] = value
     return x
 
 
 def get_db():
-    client = MongoClient('localhost', 27017)
+    client = MongoClient(MONGO['HOST'], MONGO['PORT'])
     return client.alarm_system
-
-
-y = {
-    "xxx": {
-        "state": "njnjononokn",
-        "timestamp": "7060976-96-8"
-    }
-}
-x = {
-    "sensors": [
-        {
-            "_id": "xxx",
-            "current": True,
-            "log": [
-                {
-                    "timestamp": "7060976-96-8",
-                    "state": "njnjononokn"
-                }
-            ]
-        }
-    ]
-}
 
 
 def main():
@@ -89,17 +80,14 @@ def main():
     while True:
         for sensor in magnets:
             if not magnets[sensor]['state'] == old[sensor]['state']:
-                db.sensors.update_one({"_id": sensor},
-                                      {'$addToSet': {'log': {'state': magnets[sensor]['state'],
-                                                             'timestamp': datetime.strptime(
-                                                                 magnets[sensor]['lastupdated'],
-                                                                 "%Y-%m-%dT%H:%M:%S")}}})
-                db.sensors.update_one({"_id": sensor}, {'$set': {'current': magnets[sensor]['state']}})
+                db.logs.insert_one({'mac': sensor, 'state': magnets[sensor]['state'],
+                                    'timestamp': datetime.strptime(magnets[sensor]['lastupdated'],
+                                                                   "%Y-%m-%dT%H:%M:%S")})
                 logging.info("{} - {} - {}".format(magnets[sensor]['lastupdated'], sensor,
                                                    "geöffnet" if magnets[sensor]["state"] else "geschlossen"))
-        old = magnets
-        sleep(1)
-        magnets = magnet.get_list()
+            old = magnets
+            sleep(0.5)
+            magnets = magnet.get_list()
 
 
 if __name__ == "__main__":
