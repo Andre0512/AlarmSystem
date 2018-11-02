@@ -76,7 +76,7 @@ def get_last_state(db, new):
     for sensor, value in new.items():
         if sensor not in x:
             if not db.sensors.count_documents({"_id": sensor}):
-                logging.info("Create new sensor " + sensor)
+                logging.info("Create new sensor {} ({})".format(sensor, value['name']))
                 db.sensors.insert_one({"_id": sensor, 'name': value['name']})
             x[sensor] = {'state': value['state']['open']}
         names.update({sensor: value['name']})
@@ -103,8 +103,8 @@ def main():
                     db.logs.insert_one({'mac': sensor, 'state': magnets[sensor]['state'],
                                         'timestamp': datetime.strptime(magnets[sensor]['lastupdated'],
                                                                        "%Y-%m-%dT%H:%M:%S")})
-                    logging.info("{} - {} - {}".format(magnets[sensor]['lastupdated'], names[sensor],
-                                                       "geöffnet" if magnets[sensor]["state"] else "geschlossen"))
+                    logging.info(
+                        "{} - {}".format(names[sensor], "geöffnet" if magnets[sensor]["state"] else "geschlossen"))
             old = magnets
         except Exception as e:
             logging.error(e)
