@@ -5,9 +5,9 @@ from datetime import datetime
 from time import sleep
 
 import requests
-from pymongo import MongoClient
 
-from secrets import API_KEY, GATEWAY, MONGO, DEBUG
+from secrets import API_KEY, GATEWAY, DEBUG
+from basic_mongo import BasicMongo as mongo
 
 URL = "http://{}/api/{}/sensors"
 
@@ -51,25 +51,10 @@ class Magnet(Sensor):
         super().__init__(["lumi.sensor_magnet.aq2"])
 
 
-def get_last(db):
-    return db.logs.aggregate(
-        [
-            {'$sort': {'mac': 1, 'timestamp': 1}},
-            {
-                '$group':
-                    {
-                        '_id': '$mac',
-                        'last': {'$last': '$$ROOT'}
-                    }
-            }
-        ]
-    )
-
-
 def get_last_state(db, new):
     x, names = {}, {}
     # Try to read state from Database
-    for sensor in get_last(db):
+    for sensor in mongo.get_last(db):
         x[sensor['_id']] = {}
         x[sensor['_id']]['state'] = sensor['last']['state']
     # Read data from current request
@@ -83,16 +68,11 @@ def get_last_state(db, new):
     return names, x
 
 
-def get_db():
-    client = MongoClient(MONGO['HOST'], MONGO['PORT'])
-    return client.alarm_system
-
-
 def main():
     logging.info("Programm started")
     magnet = Magnet()
     magnets = magnet.get_full_list()
-    db = get_db()
+    db = mongo.get_db()
     names, old = get_last_state(db, magnets)
     while True:
         try:
