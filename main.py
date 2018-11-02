@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from datetime import datetime
 from time import sleep
@@ -6,11 +7,15 @@ from time import sleep
 import requests
 from pymongo import MongoClient
 
-from secrets import API_KEY, GATEWAY, MONGO
+from secrets import API_KEY, GATEWAY, MONGO, DEBUG
 
 URL = "http://{}/api/{}/sensors"
 
-logging.basicConfig(level=logging.INFO, stream=sys.stdout)
+if DEBUG:
+    logging.basicConfig(level=logging.DEBUG, stream=sys.stdout, format='%(levelname)s - %(message)s')
+else:
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s',
+                        filename="{}/{}".format(os.path.dirname(os.path.realpath(__file__)), 'AlarmSystem.log'))
 
 
 class Sensor:
@@ -19,6 +24,7 @@ class Sensor:
 
     def __get_sensors(self):
         r = requests.get(URL.format(GATEWAY, API_KEY))
+        logging.debug(r.text)
         return r.json()
 
     def __get_models(self):
@@ -26,12 +32,18 @@ class Sensor:
 
     def __get_state(self):
         return {
-            v['uniqueid']: {'state': v['state']['open'], 'lastupdated': v['state']['lastupdated'], 'name': v['name']}
+            v['uniqueid']: {'state': v['state']['open'], 'lastupdated': v['state']['lastupdated']}
             for
             k, v in self.__get_models().items()}
 
+    def __get_full_state(self):
+        return {v['uniqueid']: v for k, v in self.__get_models().items()}
+
     def get_list(self):
         return self.__get_state()
+
+    def get_full_list(self):
+        return self.__get_full_state()
 
 
 class Magnet(Sensor):
@@ -55,16 +67,20 @@ def get_last(db):
 
 
 def get_last_state(db, new):
-    x = {}
+    x, names = {}, {}
+    # Try to read state from Database
     for sensor in get_last(db):
         x[sensor['_id']] = {}
         x[sensor['_id']]['state'] = sensor['last']['state']
+    # Read data from current request
     for sensor, value in new.items():
         if sensor not in x:
             if not db.sensors.count_documents({"_id": sensor}):
-                db.sensors.insert_one({"_id": sensor})
-            x[sensor] = value
-    return x
+                logging.info("Create new sensor " + sensor)
+                db.sensors.insert_one({"_id": sensor, 'name': value['name']})
+            x[sensor] = {'state': value['state']['open']}
+        names.update({sensor: value['name']})
+    return names, x
 
 
 def get_db():
@@ -73,21 +89,25 @@ def get_db():
 
 
 def main():
+    logging.info("Programm started")
     magnet = Magnet()
-    magnets = magnet.get_list()
+    magnets = magnet.get_full_list()
     db = get_db()
-    old = get_last_state(db, magnets)
+    names, old = get_last_state(db, magnets)
     while True:
-        sleep(0.5)
-        magnets = magnet.get_list()
-        for sensor in magnets:
-            if not magnets[sensor]['state'] == old[sensor]['state']:
-                db.logs.insert_one({'mac': sensor, 'state': magnets[sensor]['state'],
-                                    'timestamp': datetime.strptime(magnets[sensor]['lastupdated'],
-                                                                   "%Y-%m-%dT%H:%M:%S")})
-                logging.info("{} - {} - {}".format(magnets[sensor]['lastupdated'], sensor,
-                                                   "geöffnet" if magnets[sensor]["state"] else "geschlossen"))
-        old = magnets
+        try:
+            sleep(0.5)
+            magnets = magnet.get_list()
+            for sensor in magnets:
+                if not magnets[sensor]['state'] == old[sensor]['state']:
+                    db.logs.insert_one({'mac': sensor, 'state': magnets[sensor]['state'],
+                                        'timestamp': datetime.strptime(magnets[sensor]['lastupdated'],
+                                                                       "%Y-%m-%dT%H:%M:%S")})
+                    logging.info("{} - {} - {}".format(magnets[sensor]['lastupdated'], names[sensor],
+                                                       "geöffnet" if magnets[sensor]["state"] else "geschlossen"))
+            old = magnets
+        except Exception as e:
+            logging.error(e)
 
 
 if __name__ == "__main__":
