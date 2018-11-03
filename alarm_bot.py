@@ -8,6 +8,7 @@ from telegram.ext.commandhandler import CommandHandler
 from telegram.ext.filters import Filters
 from telegram.ext.messagehandler import MessageHandler
 from telegram.ext.updater import Updater
+from telegram.forcereply import ForceReply
 from telegram.inline.inlinekeyboardbutton import InlineKeyboardButton
 from telegram.inline.inlinekeyboardmarkup import InlineKeyboardMarkup
 from telegram.keyboardbutton import KeyboardButton
@@ -23,12 +24,21 @@ if DEBUG:
     logging.basicConfig(level=logging.DEBUG, stream=sys.stdout, format='%(levelname)s - %(message)s')
 else:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s',
-                        filename="{}/{}".format(os.path.dirname(os.path.realpath(__file__)), 'state_channel.log'))
+                        filename="{}/{}".format(os.path.dirname(os.path.realpath(__file__)), 'alarm_bot.log'))
 
 logger = logging.getLogger(__name__)
 
 KB = ["Sensoren"]
+SENSOR_KB = {"sensor_rename": "✏️ Umbenennen", "sensor_add_group": "➕ Gruppe hinzufügen",
+             "sensor_change_group": "🔄 Gruppe wechseln", "sensor_back": "⬅ ️Zurück"}
 db = mongo.get_db()
+
+
+def get_sensor_keyboard(data):
+    stri = SENSOR_KB.copy()
+    stri.pop("sensor_add_group" if True else "sensor_change_group", None)
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton(v, callback_data="{}.{}".format(k, data))] for k, v in stri.items()])
 
 
 def get_keyboard():
@@ -46,12 +56,13 @@ def help(bot, update):
 def get_sensor_list():
     magnet = Magnet()
     magnets = magnet.get_full_list()
-    return InlineKeyboardMarkup([[InlineKeyboardButton(v['name'], callback_data=v['id'])] for v in magnets.values()])
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton(v['name'], callback_data="sensor." + v['id'])] for v in magnets.values()])
 
 
-def get_sensor_info(update):
+def get_sensor_info(sensor):
     magnet = Magnet()
-    s = magnet.get_sensor(update.callback_query.data)
+    s = magnet.get_sensor(sensor)
     status = ['geschlossen', 'offen ⚠️']
     battery = "{}%{}".format(s['config']['battery'], "" if s['config']['battery'] > 20 else " ⚠️")
     txt = "*{}*\nStatus: {}\nErreichbar: {}\nLetzter Kontakt: _{}_\nBatterie: {}\nTemperatur: {}°C\nTyp: _{}_\nID: `{}`"
@@ -60,8 +71,25 @@ def get_sensor_info(update):
                       s['type'], s['uniqueid'])
 
 
-def send_sensor_info(update):
-    update.callback_query.message.edit_text(get_sensor_info(update), parse_mode=ParseMode.MARKDOWN)
+def send_sensor_info(update, sensor=None):
+    sensor = str(update.callback_query.data.split(".")[-1] if not sensor else sensor)
+    print(sensor)
+    update.callback_query.message.edit_text(get_sensor_info(sensor), parse_mode=ParseMode.MARKDOWN,
+                                            reply_markup=get_sensor_keyboard(sensor))
+
+
+def rename_sensor(update, value):
+    msg_id = update.callback_query.message.reply_text("Bitte neuen Namen eingeben:", reply_markup=ForceReply())[
+        'message_id']
+    kb = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("Abbrechen", callback_data="sensor_rename_abort.{}-{}".format(str(msg_id), value))]])
+    update.callback_query.message.edit_text(get_sensor_info(value), parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+
+
+def abort_rename_sensor(bot, update, value):
+    msg_id, sensor = value.split('-')
+    bot.delete_message(chat_id=update.callback_query.message.chat_id, message_id=msg_id)
+    send_sensor_info(update, sensor)
 
 
 def send_sensor_list(update):
@@ -79,7 +107,15 @@ def error(bot, update, error):
 
 def answer_callback(bot, update):
     update.callback_query.answer()
-    send_sensor_info(update)
+    cmd, value = update.callback_query.data.split('.')
+    if cmd in ["sensor"]:
+        send_sensor_info(update)
+    elif cmd in ["sensor_back"]:
+        send_sensor_list(update.callback_query)
+    elif cmd in ["sensor_rename"]:
+        rename_sensor(update, value)
+    elif cmd in ["sensor_rename_abort"]:
+        abort_rename_sensor(bot, update, value)
 
 
 def main():

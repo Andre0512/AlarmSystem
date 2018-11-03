@@ -7,4 +7,4 @@ TIMEZONE = "Europe/Berlin"
 
 def get_local_time(t):
     return utc.localize(datetime.strptime(t, "%Y-%m-%dT%H:%M:%S")).astimezone(timezone(TIMEZONE)).strftime(
-        "%Y-%m-%d %H:%M")
+        "%Y-%m-%d %H:%M:%S")
