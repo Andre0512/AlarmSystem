@@ -18,6 +18,7 @@ if DEBUG:
 else:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s',
                         filename="{}/{}".format(os.path.dirname(os.path.realpath(__file__)), 'state_channel.log'))
+logger = logging.getLogger(__name__)
 
 
 def parse_message():
@@ -44,7 +45,7 @@ def send(bot=None):
 def answer_callback(bot, update):
     if update.callback_query.data == "refresh":
         send(bot)
-        logging.info(
+        logger.info(
             "Update - {} - {}".format(update.callback_query.from_user.first_name, update.callback_query.from_user.id))
     update.callback_query.answer()
 
@@ -65,4 +66,4 @@ if __name__ == '__main__':
         else:
             main()
     except Exception as e:
-        logging.error(e)
+        logger.error(e)

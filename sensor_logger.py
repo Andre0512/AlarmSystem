@@ -4,51 +4,16 @@ import sys
 from datetime import datetime
 from time import sleep
 
-import requests
-
-from secrets import API_KEY, GATEWAY, DEBUG
 from basic_mongo import BasicMongo as mongo
-
-URL = "http://{}/api/{}/sensors"
+from secrets import DEBUG
+from sensors import Magnet
 
 if DEBUG:
     logging.basicConfig(level=logging.DEBUG, stream=sys.stdout, format='%(levelname)s - %(message)s')
 else:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s',
                         filename="{}/{}".format(os.path.dirname(os.path.realpath(__file__)), 'AlarmSystem.log'))
-
-
-class Sensor:
-    def __init__(self, sensor_type):
-        self.__type = sensor_type
-
-    def __get_sensors(self):
-        r = requests.get(URL.format(GATEWAY, API_KEY))
-        logging.debug(r.text)
-        return r.json()
-
-    def __get_models(self):
-        return {k: v for k, v in self.__get_sensors().items() if v["modelid"] in self.__type}
-
-    def __get_state(self):
-        return {
-            v['uniqueid']: {'state': v['state']['open'], 'lastupdated': v['state']['lastupdated']}
-            for
-            k, v in self.__get_models().items()}
-
-    def __get_full_state(self):
-        return {v['uniqueid']: v for k, v in self.__get_models().items()}
-
-    def get_list(self):
-        return self.__get_state()
-
-    def get_full_list(self):
-        return self.__get_full_state()
-
-
-class Magnet(Sensor):
-    def __init__(self):
-        super().__init__(["lumi.sensor_magnet.aq2"])
+logger = logging.getLogger(__name__)
 
 
 def get_last_state(db, new):
@@ -61,7 +26,7 @@ def get_last_state(db, new):
     for sensor, value in new.items():
         if sensor not in x:
             if not db.sensors.count_documents({"_id": sensor}):
-                logging.info("Create new sensor {} ({})".format(sensor, value['name']))
+                logger.info("Create new sensor {} ({})".format(sensor, value['name']))
                 db.sensors.insert_one({"_id": sensor, 'name': value['name']})
             x[sensor] = {'state': value['state']['open']}
         names.update({sensor: value['name']})
@@ -69,7 +34,7 @@ def get_last_state(db, new):
 
 
 def main():
-    logging.info("Programm started")
+    logger.info("Programm started")
     magnet = Magnet()
     magnets = magnet.get_full_list()
     db = mongo.get_db()
@@ -83,11 +48,11 @@ def main():
                     db.logs.insert_one({'mac': sensor, 'state': magnets[sensor]['state'],
                                         'timestamp': datetime.strptime(magnets[sensor]['lastupdated'],
                                                                        "%Y-%m-%dT%H:%M:%S")})
-                    logging.info(
+                    logger.info(
                         "{} - {}".format(names[sensor], "geöffnet" if magnets[sensor]["state"] else "geschlossen"))
             old = magnets
         except Exception as e:
-            logging.error(e)
+            logger.error(e)
 
 
 if __name__ == "__main__":
