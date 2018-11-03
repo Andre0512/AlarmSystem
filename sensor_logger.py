@@ -12,7 +12,7 @@ if DEBUG:
     logging.basicConfig(level=logging.DEBUG, stream=sys.stdout, format='%(levelname)s - %(message)s')
 else:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s',
-                        filename="{}/{}".format(os.path.dirname(os.path.realpath(__file__)), 'AlarmSystem.log'))
+                        filename="{}/{}".format(os.path.dirname(os.path.realpath(__file__)), 'log/sensor_logger.log'))
 logger = logging.getLogger(__name__)
 
 

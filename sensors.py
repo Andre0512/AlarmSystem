@@ -39,6 +39,11 @@ class Sensor:
     def get_sensor(self, sid):
         return self.__get_sensors("/" + sid)
 
+    @staticmethod
+    def update_name(sid, new):
+        r = requests.put("{}/{}".format(URL.format(GATEWAY, API_KEY), sid), json={"name": new})
+        return r.status_code == 200
+
 
 class Magnet(Sensor):
     def __init__(self):

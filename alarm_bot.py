@@ -3,6 +3,7 @@ import logging
 import os
 import sys
 
+from telegram.error import TelegramError
 from telegram.ext.callbackqueryhandler import CallbackQueryHandler
 from telegram.ext.commandhandler import CommandHandler
 from telegram.ext.filters import Filters
@@ -24,13 +25,14 @@ if DEBUG:
     logging.basicConfig(level=logging.DEBUG, stream=sys.stdout, format='%(levelname)s - %(message)s')
 else:
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s',
-                        filename="{}/{}".format(os.path.dirname(os.path.realpath(__file__)), 'alarm_bot.log'))
+                        filename="{}/{}".format(os.path.dirname(os.path.realpath(__file__)), 'log/alarm_bot.log'))
 
 logger = logging.getLogger(__name__)
 
 KB = ["Sensoren"]
 SENSOR_KB = {"sensor_rename": "✏️ Umbenennen", "sensor_add_group": "➕ Gruppe hinzufügen",
              "sensor_change_group": "🔄 Gruppe wechseln", "sensor_back": "⬅ ️Zurück"}
+NEW_NAME = "Bitte neuen Namen für {} eingeben:"
 db = mongo.get_db()
 
 
@@ -60,9 +62,10 @@ def get_sensor_list():
         [[InlineKeyboardButton(v['name'], callback_data="sensor." + v['id'])] for v in magnets.values()])
 
 
-def get_sensor_info(sensor):
+def get_sensor_info(sensor, chat_data):
     magnet = Magnet()
     s = magnet.get_sensor(sensor)
+    chat_data['name']= s['name']
     status = ['geschlossen', 'offen ⚠️']
     battery = "{}%{}".format(s['config']['battery'], "" if s['config']['battery'] > 20 else " ⚠️")
     txt = "*{}*\nStatus: {}\nErreichbar: {}\nLetzter Kontakt: _{}_\nBatterie: {}\nTemperatur: {}°C\nTyp: _{}_\nID: `{}`"
@@ -71,32 +74,45 @@ def get_sensor_info(sensor):
                       s['type'], s['uniqueid'])
 
 
-def send_sensor_info(update, sensor=None):
-    sensor = str(update.callback_query.data.split(".")[-1] if not sensor else sensor)
-    print(sensor)
-    update.callback_query.message.edit_text(get_sensor_info(sensor), parse_mode=ParseMode.MARKDOWN,
-                                            reply_markup=get_sensor_keyboard(sensor))
+def send_sensor_info(update, chat_data, sensor=None):
+    sensor = str(update.data.split(".")[-1] if not sensor else sensor)
+    try:
+        update.message.edit_text(get_sensor_info(sensor, chat_data), parse_mode=ParseMode.MARKDOWN,
+                                 reply_markup=get_sensor_keyboard(sensor))
+    except TelegramError:
+        update.message.reply_text(get_sensor_info(sensor, chat_data), parse_mode=ParseMode.MARKDOWN,
+                                  reply_markup=get_sensor_keyboard(sensor))
 
 
-def rename_sensor(update, value):
-    msg_id = update.callback_query.message.reply_text("Bitte neuen Namen eingeben:", reply_markup=ForceReply())[
-        'message_id']
+def rename_sensor(update, value, chat_data):
+    msg_id = update.callback_query.message.reply_text(NEW_NAME.format(chat_data['name']), reply_markup=ForceReply())['message_id']
     kb = InlineKeyboardMarkup(
         [[InlineKeyboardButton("Abbrechen", callback_data="sensor_rename_abort.{}-{}".format(str(msg_id), value))]])
-    update.callback_query.message.edit_text(get_sensor_info(value), parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
+    update.callback_query.message.edit_text(get_sensor_info(value, chat_data), parse_mode=ParseMode.MARKDOWN,
+                                            reply_markup=kb)
 
 
-def abort_rename_sensor(bot, update, value):
+def abort_rename_sensor(bot, update, value, chat_data):
     msg_id, sensor = value.split('-')
     bot.delete_message(chat_id=update.callback_query.message.chat_id, message_id=msg_id)
-    send_sensor_info(update, sensor)
+    send_sensor_info(update.callback_query, sensor, chat_data)
 
 
 def send_sensor_list(update):
     update.message.reply_text("Wähle einen Sensor aus:", reply_markup=get_sensor_list())
 
 
-def echo(bot, update):
+def update_sensor_name(sensor, update, chat_data):
+    if Magnet.update_name(sensor, update.message.text) and mongo.update_name(db, chat_data["name"], update.message.text):
+        send_sensor_info(update, chat_data, sensor=sensor)
+    else:
+        update.message.reply_text("Etwas ist schief gelaufen...")
+
+
+def echo(bot, update, chat_data):
+    if update.message.reply_to_message:
+        if update.message.reply_to_message.text == NEW_NAME.format(chat_data['name']):
+            update_sensor_name(chat_data["id"], update, chat_data)
     if update.message.text in KB[0]:
         send_sensor_list(update)
 
@@ -105,17 +121,18 @@ def error(bot, update, error):
     logger.warning('Update "%s" caused error "%s"', update, error)
 
 
-def answer_callback(bot, update):
+def answer_callback(bot, update, chat_data):
     update.callback_query.answer()
     cmd, value = update.callback_query.data.split('.')
     if cmd in ["sensor"]:
-        send_sensor_info(update)
+        send_sensor_info(update.callback_query, chat_data)
     elif cmd in ["sensor_back"]:
         send_sensor_list(update.callback_query)
     elif cmd in ["sensor_rename"]:
-        rename_sensor(update, value)
+        rename_sensor(update, value, chat_data)
+        chat_data["id"] = value
     elif cmd in ["sensor_rename_abort"]:
-        abort_rename_sensor(bot, update, value)
+        abort_rename_sensor(bot, update, value, chat_data)
 
 
 def main():
@@ -124,8 +141,8 @@ def main():
 
     dp.add_handler(CommandHandler("start", start))
     dp.add_handler(CommandHandler("help", help))
-    dp.add_handler(MessageHandler(Filters.text, echo))
-    dp.add_handler(CallbackQueryHandler(answer_callback))
+    dp.add_handler(MessageHandler(Filters.text, echo, pass_chat_data=True))
+    dp.add_handler(CallbackQueryHandler(answer_callback, pass_chat_data=True))
     dp.add_error_handler(error)
 
     updater.start_polling()
