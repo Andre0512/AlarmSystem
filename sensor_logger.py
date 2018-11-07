@@ -40,20 +40,20 @@ def main():
     db = mongo.get_db()
     names, old = get_last_state(db, magnets)
     while True:
-        try:
-            sleep(0.5)
-            magnets = magnet.get_list()
-            for sensor in magnets:
-                if not magnets[sensor]['state'] == old[sensor]['state']:
-                    db.logs.insert_one({'mac': sensor, 'state': magnets[sensor]['state'],
-                                        'timestamp': datetime.strptime(magnets[sensor]['lastupdated'],
-                                                                       "%Y-%m-%dT%H:%M:%S")})
-                    logger.info(
-                        "{} - {}".format(names[sensor], "geöffnet" if magnets[sensor]["state"] else "geschlossen"))
-            old = magnets
-        except Exception as e:
-            logger.error(e)
+        sleep(0.5)
+        magnets = magnet.get_list()
+        for sensor in magnets:
+            if not magnets[sensor]['state'] == old[sensor]['state']:
+                db.logs.insert_one({'mac': sensor, 'state': magnets[sensor]['state'],
+                                    'timestamp': datetime.strptime(magnets[sensor]['lastupdated'],
+                                                                   "%Y-%m-%dT%H:%M:%S")})
+                logger.info("{} - {}".format(names[sensor], "geöffnet" if magnets[sensor]["state"] else "geschlossen"))
+        old = magnets
 
 
 if __name__ == "__main__":
-    main()
+    while True:
+        try:
+            main()
+        except Exception as e:
+            logger.error(e)

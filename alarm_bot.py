@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 KB = ["Sensoren"]
 SENSOR_KB = {"sensor_rename": "✏️ Umbenennen", "sensor_add_group": "➕ Gruppe hinzufügen",
              "sensor_change_group": "🔄 Gruppe wechseln", "sensor_back": "⬅ ️Zurück"}
-NEW_NAME = "Bitte neuen Namen für {} eingeben:"
+NEW_NAME = "Bitte neuen Namen für *{}* eingeben:"
 db = mongo.get_db()
 
 
@@ -65,7 +65,7 @@ def get_sensor_list():
 def get_sensor_info(sensor, chat_data):
     magnet = Magnet()
     s = magnet.get_sensor(sensor)
-    chat_data['name']= s['name']
+    chat_data['name'] = s['name']
     status = ['geschlossen', 'offen ⚠️']
     battery = "{}%{}".format(s['config']['battery'], "" if s['config']['battery'] > 20 else " ⚠️")
     txt = "*{}*\nStatus: {}\nErreichbar: {}\nLetzter Kontakt: _{}_\nBatterie: {}\nTemperatur: {}°C\nTyp: _{}_\nID: `{}`"
@@ -85,7 +85,8 @@ def send_sensor_info(update, chat_data, sensor=None):
 
 
 def rename_sensor(update, value, chat_data):
-    msg_id = update.callback_query.message.reply_text(NEW_NAME.format(chat_data['name']), reply_markup=ForceReply())['message_id']
+    msg_id = update.callback_query.message.reply_text(NEW_NAME.format(chat_data['name']), reply_markup=ForceReply(),
+                                                      parse_mode=ParseMode.MARKDOWN)['message_id']
     kb = InlineKeyboardMarkup(
         [[InlineKeyboardButton("Abbrechen", callback_data="sensor_rename_abort.{}-{}".format(str(msg_id), value))]])
     update.callback_query.message.edit_text(get_sensor_info(value, chat_data), parse_mode=ParseMode.MARKDOWN,
@@ -95,15 +96,17 @@ def rename_sensor(update, value, chat_data):
 def abort_rename_sensor(bot, update, value, chat_data):
     msg_id, sensor = value.split('-')
     bot.delete_message(chat_id=update.callback_query.message.chat_id, message_id=msg_id)
-    send_sensor_info(update.callback_query, sensor, chat_data)
+    send_sensor_info(update.callback_query, chat_data, sensor=sensor)
 
 
-def send_sensor_list(update):
-    update.message.reply_text("Wähle einen Sensor aus:", reply_markup=get_sensor_list())
+def send_sensor_list(update, edit=False):
+    send = update.message.edit_text if edit else update.message.reply_text
+    send("Wähle einen Sensor aus:", reply_markup=get_sensor_list())
 
 
 def update_sensor_name(sensor, update, chat_data):
-    if Magnet.update_name(sensor, update.message.text) and mongo.update_name(db, chat_data["name"], update.message.text):
+    if Magnet.update_name(sensor, update.message.text) and mongo.update_name(db, chat_data["name"],
+                                                                             update.message.text):
         send_sensor_info(update, chat_data, sensor=sensor)
     else:
         update.message.reply_text("Etwas ist schief gelaufen...")
@@ -127,7 +130,7 @@ def answer_callback(bot, update, chat_data):
     if cmd in ["sensor"]:
         send_sensor_info(update.callback_query, chat_data)
     elif cmd in ["sensor_back"]:
-        send_sensor_list(update.callback_query)
+        send_sensor_list(update.callback_query, edit=True)
     elif cmd in ["sensor_rename"]:
         rename_sensor(update, value, chat_data)
         chat_data["id"] = value
