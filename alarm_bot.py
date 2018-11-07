@@ -29,10 +29,11 @@ else:
 
 logger = logging.getLogger(__name__)
 
-KB = ["Sensoren"]
+KB = ["Sensoren", "Scharf schalten"]
 SENSOR_KB = {"sensor_rename": "✏️ Umbenennen", "sensor_add_group": "➕ Gruppe hinzufügen",
              "sensor_change_group": "🔄 Gruppe wechseln", "sensor_back": "⬅ ️Zurück"}
 NEW_NAME = "Bitte neuen Namen für *{}* eingeben:"
+ALARM_MODE = ["1️⃣ Totaler Alarm", "2️⃣ Innen Alarm", "3️⃣ Stummer Alarm", "⬅️ Zurück"]
 db = mongo.get_db()
 
 
@@ -55,11 +56,16 @@ def help(bot, update):
     update.message.reply_text('Help!')
 
 
-def get_sensor_list():
+def get_sensor_list(data="sensor.", active=None):
+    active = [] if not active else active
     magnet = Magnet()
     magnets = magnet.get_full_list()
-    return InlineKeyboardMarkup(
-        [[InlineKeyboardButton(v['name'], callback_data="sensor." + v['id'])] for v in magnets.values()])
+    result = []
+    for v in magnets.values():
+        text = ("❌ " if v['id'] in active else "") + v['name']
+        result += [[InlineKeyboardButton(text, callback_data=data + v['id'])]]
+    result = result + [[InlineKeyboardButton(text="Weiter ➡️", callback_data="arm_next")]] if active else result
+    return InlineKeyboardMarkup(result)
 
 
 def get_sensor_info(sensor, chat_data):
@@ -112,16 +118,33 @@ def update_sensor_name(sensor, update, chat_data):
         update.message.reply_text("Etwas ist schief gelaufen...")
 
 
+def arm_system(update):
+    update.message.reply_text("Wähle Sensor(en) und/oder Gruppe(n) aus:", reply_markup=get_sensor_list(data="arm."))
+
+
 def echo(bot, update, chat_data):
     if update.message.reply_to_message:
         if update.message.reply_to_message.text == NEW_NAME.format(chat_data['name']):
             update_sensor_name(chat_data["id"], update, chat_data)
     if update.message.text in KB[0]:
         send_sensor_list(update)
+    if update.message.text in KB[1]:
+        arm_system(update)
 
 
 def error(bot, update, error):
     logger.warning('Update "%s" caused error "%s"', update, error)
+
+
+def get_active(chat_data, value):
+    if 'activate' in chat_data:
+        if value in chat_data['activate']:
+            chat_data['activate'].remove(value)
+            return
+        chat_data["activate"] = chat_data["activate"] + [value]
+        return
+    chat_data['activate'] = [value]
+    return
 
 
 def answer_callback(bot, update, chat_data):
@@ -129,6 +152,11 @@ def answer_callback(bot, update, chat_data):
     cmd, value = update.callback_query.data.split('.')
     if cmd in ["sensor"]:
         send_sensor_info(update.callback_query, chat_data)
+    elif cmd in ["arm"]:
+        get_active(chat_data, value)
+        print(chat_data)
+        kb = get_sensor_list(data="arm.", active=chat_data["activate"])
+        update.callback_query.message.edit_text("Wähle Sensor(en) und/oder Gruppe(n) aus:", reply_markup=kb)
     elif cmd in ["sensor_back"]:
         send_sensor_list(update.callback_query, edit=True)
     elif cmd in ["sensor_rename"]:
