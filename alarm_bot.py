@@ -33,7 +33,8 @@ KB = ["Sensoren", "Scharf schalten"]
 SENSOR_KB = {"sensor_rename": "✏️ Umbenennen", "sensor_add_group": "➕ Gruppe hinzufügen",
              "sensor_change_group": "🔄 Gruppe wechseln", "sensor_back": "⬅ ️Zurück"}
 NEW_NAME = "Bitte neuen Namen für *{}* eingeben:"
-ALARM_MODE = ["1️⃣ Totaler Alarm", "2️⃣ Innen Alarm", "3️⃣ Stummer Alarm", "⬅️ Zurück"]
+ALARM_MODE = {"arm_mode.1": "1️⃣ Totaler Alarm", "arm_mode.2": "2️⃣ Innen Alarm", "arm_mode.3": "3️⃣ Stummer Alarm",
+              "arm_back.": "⬅️ Zurück"}
 db = mongo.get_db()
 
 
@@ -42,6 +43,10 @@ def get_sensor_keyboard(data):
     stri.pop("sensor_add_group" if True else "sensor_change_group", None)
     return InlineKeyboardMarkup(
         [[InlineKeyboardButton(v, callback_data="{}.{}".format(k, data))] for k, v in stri.items()])
+
+
+def get_alarm_mode_kb():
+    return InlineKeyboardMarkup([[InlineKeyboardButton(v, callback_data=k)] for k, v in ALARM_MODE.items()])
 
 
 def get_keyboard():
@@ -64,8 +69,14 @@ def get_sensor_list(data="sensor.", active=None):
     for v in magnets.values():
         text = ("❌ " if v['id'] in active else "") + v['name']
         result += [[InlineKeyboardButton(text, callback_data=data + v['id'])]]
-    result = result + [[InlineKeyboardButton(text="Weiter ➡️", callback_data="arm_next")]] if active else result
+    result = result + [[InlineKeyboardButton(text="Weiter ➡️", callback_data="arm_next.")]] if active else result
     return InlineKeyboardMarkup(result)
+
+
+def get_sensors_text(chat_data):
+    m = Magnet().get_full_list()
+    text = "*Alarm für diese Sensoren aktivieren*\n"
+    return text + "\n".join(["- " + v['name'] for v in m.values() if v['id'] in chat_data['activate']])
 
 
 def get_sensor_info(sensor, chat_data):
@@ -152,11 +163,13 @@ def answer_callback(bot, update, chat_data):
     cmd, value = update.callback_query.data.split('.')
     if cmd in ["sensor"]:
         send_sensor_info(update.callback_query, chat_data)
-    elif cmd in ["arm"]:
+    elif cmd in ["arm", "arm_back"]:
         get_active(chat_data, value)
-        print(chat_data)
         kb = get_sensor_list(data="arm.", active=chat_data["activate"])
         update.callback_query.message.edit_text("Wähle Sensor(en) und/oder Gruppe(n) aus:", reply_markup=kb)
+    elif cmd in ["arm_next"]:
+        update.callback_query.message.edit_text(get_sensors_text(chat_data), reply_markup=get_alarm_mode_kb(),
+                                                parse_mode=ParseMode.MARKDOWN)
     elif cmd in ["sensor_back"]:
         send_sensor_list(update.callback_query, edit=True)
     elif cmd in ["sensor_rename"]:
