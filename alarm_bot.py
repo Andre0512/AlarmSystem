@@ -84,7 +84,7 @@ def get_sensor_info(sensor, chat_data):
     s = magnet.get_sensor(sensor)
     chat_data['name'] = s['name']
     status = ['geschlossen', 'offen ⚠️']
-    battery = "{}%{}".format(s['config']['battery'], "" if s['config']['battery'] > 20 else " ⚠️")
+    battery = "{}%{}".format(int(s['config']['battery']), "" if int(s['config']['battery']) > 20 else " ⚠️")
     txt = "*{}*\nStatus: {}\nErreichbar: {}\nLetzter Kontakt: _{}_\nBatterie: {}\nTemperatur: {}°C\nTyp: _{}_\nID: `{}`"
     return txt.format(s['name'], status[int(s['state']['open'])], "✔️" if s['config']['reachable'] else "❌",
                       get_local_time(s['state']['lastupdated']), battery, s['config']['temperature'] / 100,
@@ -122,8 +122,7 @@ def send_sensor_list(update, edit=False):
 
 
 def update_sensor_name(sensor, update, chat_data):
-    if Magnet.update_name(sensor, update.message.text) and mongo.update_name(db, chat_data["name"],
-                                                                             update.message.text):
+    if Magnet.update_name(sensor, update.message.text) and mongo.update_name(db, sensor, update.message.text):
         send_sensor_info(update, chat_data, sensor=sensor)
     else:
         update.message.reply_text("Etwas ist schief gelaufen...")
@@ -135,7 +134,7 @@ def arm_system(update):
 
 def echo(bot, update, chat_data):
     if update.message.reply_to_message:
-        if update.message.reply_to_message.text == NEW_NAME.format(chat_data['name']):
+        if update.message.reply_to_message.text.replace("*", "") == NEW_NAME.format(chat_data['name']).replace("*", ""):
             update_sensor_name(chat_data["id"], update, chat_data)
     if update.message.text in KB[0]:
         send_sensor_list(update)

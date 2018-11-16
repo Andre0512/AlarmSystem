@@ -27,14 +27,14 @@ def get_last_state(db, new):
         if sensor not in x:
             if not db.sensors.count_documents({"_id": sensor}):
                 logger.info("Create new sensor {} ({})".format(sensor, value['name']))
-                db.sensors.insert_one({"_id": sensor, 'name': value['name']})
+                db.sensors.insert_one({"_id": sensor, 'name': value['name'], 'deconz_id': value['id']})
             x[sensor] = {'state': value['state']['open']}
         names.update({sensor: value['name']})
     return names, x
 
 
 def main():
-    logger.info("Programm started")
+    logger.info("Program started")
     magnet = Magnet()
     magnets = magnet.get_full_list()
     db = mongo.get_db()

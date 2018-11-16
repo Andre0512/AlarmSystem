@@ -1,6 +1,11 @@
+import logging
+
 from pymongo.mongo_client import MongoClient
 
 from secrets import MONGO
+
+
+logger = logging.getLogger(__name__)
 
 
 class BasicMongo:
@@ -30,6 +35,10 @@ class BasicMongo:
         return client.alarm_system
 
     @staticmethod
-    def update_name(db, old, new):
-        print(db.sensors.update_one({"name": old}, {"$set": {"name": new}}))
-        return True
+    def update_name(db, d_id, new):
+        try:
+            db.sensors.update_one({"deconz_id": d_id}, {"$set": {"name": new}})
+            return True
+        except Exception as e:
+            logger.error(e)
+            return False
