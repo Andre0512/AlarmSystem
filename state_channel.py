@@ -24,10 +24,12 @@ logger = logging.getLogger(__name__)
 def parse_message():
     text = []
     db = mongo.get_db()
-    names = mongo.get_names(db)
-    for state in mongo.get_last(db):
-        text.append("{} {}".format("🔴" if state['last']['state'] else "🔵", names[state['_id']]))
-    text.append("_Aktualisiert: {}_".format(datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S")))
+    state = {state['_id']:state['last']['state'] for state in mongo.get_last(db)}
+    for group, x in sorted(mongo.get_names(db).items()):
+        text.append("\n*{}*".format(group))
+        for s_id, name in sorted(x.items(), key=lambda x: x[1][0]):
+            text.append("{} {}".format("🔴" if state[s_id] else "🔵", name[0]))
+    text.append("\n_Aktualisiert: {}_".format(datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S")))
     return "\n".join(text)
 
 
@@ -60,10 +62,12 @@ def main():
 
 
 if __name__ == '__main__':
-    try:
+    if True:
         if len(sys.argv) > 1 and sys.argv[1] == "1":
             send()
         else:
             main()
+    try:
+        pass
     except Exception as e:
         logger.error(e)

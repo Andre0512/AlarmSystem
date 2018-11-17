@@ -15,7 +15,7 @@ class Sensor:
 
     def __get_sensors(self, sensor=""):
         r = requests.get(URL.format(GATEWAY, API_KEY) + sensor)
-        logging.debug(r.text)
+        logger.debug(r.text)
         return r.json()
 
     def __get_models(self):
@@ -37,6 +37,7 @@ class Sensor:
         return self.__get_full_state()
 
     def get_sensor(self, sid):
+        logger.debug('Sensor ID - ' + sid)
         return self.__get_sensors("/" + sid)
 
     @staticmethod

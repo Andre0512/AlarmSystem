@@ -27,7 +27,7 @@ def get_last_state(db, new):
         if sensor not in x:
             if not db.sensors.count_documents({"_id": sensor}):
                 logger.info("Create new sensor {} ({})".format(sensor, value['name']))
-                db.sensors.insert_one({"_id": sensor, 'name': value['name'], 'deconz_id': value['id']})
+                db.sensors.insert_one({"_id": sensor, 'name': value['name'], 'deconz_id': value['id'], 'groups':[]})
             x[sensor] = {'state': value['state']['open']}
         names.update({sensor: value['name']})
     return names, x
