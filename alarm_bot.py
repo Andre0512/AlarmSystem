@@ -72,14 +72,22 @@ def help(bot, update):
     update.message.reply_text('Help!')
 
 
-def get_sensor_list(data="sensor.", active=None):
-    active = [] if not active else active
+def get_sensor_list(data="sensor.", chat_data=None):
+    chat_data = {} if not chat_data else chat_data
     result = []
     for v in mongo.get_sensors(mongo.get_db()):
         group = v['groups'][0] + " - " if v['groups'] else ""
-        text = ("❌ " if v['deconz_id'] in active else "") + group + v['name']
+        text = ("❌ " if "activate" in chat_data and v['deconz_id'] in chat_data["activate"] else "") + group + v['name']
         result += [[InlineKeyboardButton(text, callback_data=data + v['deconz_id'])]]
-    result += [[InlineKeyboardButton(text="Weiter ➡️", callback_data="arm_next.")]] if active else []
+    if data == "arm.":
+        for i, n in mongo.get_groups(mongo.get_db()).items():
+            if 'activate_group' in chat_data:
+                print(chat_data["activate_group"])
+            text = ("❌ " if "activate_group" in chat_data and i in chat_data[
+                "activate_group"] else "") + "👥 {}".format(n)
+            result += [[InlineKeyboardButton(text, callback_data="{}group{}".format(data, i))]]
+    result += [[InlineKeyboardButton(text="Weiter ➡️", callback_data="arm_next.")]] if "activate" in chat_data and \
+                                                                                       chat_data["activate"] else []
     return InlineKeyboardMarkup(result)
 
 
@@ -177,14 +185,31 @@ def error(bot, update, error):
     logger.warning('Update "%s" caused error "%s"', update, error)
 
 
-def get_active(chat_data, value):
+def get_active(chat_data, data):
+    value = [data] if not data[:5] == 'group' else mongo.get_group_sensors(mongo.get_db())[data[5:]]
+    # Wahr wenn einer aus Gruppe noch fehlt
+    # remove = not any([x not in chat_data['activate'] for x in value if 'activate' in chat_data])
+    # Wahr wenn jeder aus Gruppe vorhanden
+    remove = not any([x not in chat_data['activate'] for x in value]) if 'activate' in chat_data else False
+    print(chat_data['activate'] if 'activate' in chat_data else "")
+    print([x not in chat_data['activate'] for x in value] if 'activate' in chat_data else "")
     if 'activate' in chat_data:
-        if value in chat_data['activate']:
-            chat_data['activate'].remove(value)
-            return
-        chat_data["activate"] = chat_data["activate"] + [value]
+        for v in value:
+            if remove:
+                chat_data['activate'].remove(v)
+                continue
+            chat_data["activate"] = list(set(chat_data["activate"] + [v]))
+    else:
+        chat_data['activate'] = value
+    if not data[:5] == 'group':
         return
-    chat_data['activate'] = [value]
+    elif 'activate_group' in chat_data:
+        if remove:
+            chat_data['activate_group'].remove(data[5:])
+            return
+        chat_data["activate_group"] = list(set(chat_data["activate_group"] + [data[5:]]))
+        return
+    chat_data['activate_group'] = [data[5:]]
     return
 
 
@@ -208,11 +233,10 @@ def answer_callback(bot, update, chat_data):
 
     if cmd in ["sensor", "group_manage_back"]:
         send_sensor_info(update.callback_query, chat_data)
-        print(value)
         chat_data["id"] = value
     elif cmd in ["arm", "arm_back"]:
         get_active(chat_data, value)
-        kb = get_sensor_list(data="arm.", active=chat_data["activate"])
+        kb = get_sensor_list(data="arm.", chat_data=chat_data)
         update.callback_query.message.edit_text("Wähle Sensor(en) und/oder Gruppe(n) aus:", reply_markup=kb)
     elif cmd in ["arm_next"]:
         update.callback_query.message.edit_text(get_sensors_text(chat_data), reply_markup=get_alarm_mode_kb(),

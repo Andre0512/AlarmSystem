@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta, datetime
 
 from bson.objectid import ObjectId
 from pymongo.mongo_client import MongoClient
@@ -47,6 +48,16 @@ class BasicMongo:
         return result
 
     @staticmethod
+    def get_group_sensors(db):
+        result = {}
+        groups = db.groups.find({})
+        for group in groups:
+            print(group['name'])
+            result[str(group['_id'])] = [x['deconz_id'] for x in db.sensors.find({'groups': group['name']})]
+        logger.debug(result)
+        return result
+
+    @staticmethod
     def add_group(db, group):
         try:
             db.groups.insert_one({'name': group})
@@ -90,3 +101,11 @@ class BasicMongo:
         new = db.groups.find_one({'_id': ObjectId(id_new)})['name']
         action = "$pull" if new in db.sensors.find_one({"deconz_id": sensor})['groups'] else "$addToSet"
         db.sensors.update_one({"deconz_id": sensor}, {action: {"groups": new}})
+
+    @staticmethod
+    def get_day_value(db, day, state=None):
+        if not state:
+            state = {"$exists": True}
+        today = (datetime.now() + timedelta(days=day)).replace(hour=0, minute=0, second=0, microsecond=0)
+        tomorrow = today + timedelta(days=1)
+        return db.logs.find({"state": state, "timestamp": {"$gte": today, "$lt": tomorrow}})

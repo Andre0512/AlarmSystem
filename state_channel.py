@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 def parse_message():
     text = []
     db = mongo.get_db()
-    state = {state['_id']:state['last']['state'] for state in mongo.get_last(db)}
+    state = {state['_id']: state['last']['state'] for state in mongo.get_last(db)}
     for group, x in sorted(mongo.get_names(db).items()):
         text.append("\n*{}*".format(group))
         for s_id, name in sorted(x.items(), key=lambda x: x[1][0]):
@@ -41,15 +41,15 @@ def send(bot=None):
     if not bot:
         bot = Bot(TELEGRAM["token"])
     bot.edit_message_text(chat_id=TELEGRAM["chat_id"], message_id=TELEGRAM["msg_id"], text=parse_message(),
-                          parse_mode=ParseMode.MARKDOWN, timeout=60, reply_markup=get_keyboard())
+                     parse_mode=ParseMode.MARKDOWN, reply_markup=get_keyboard())
 
 
 def answer_callback(bot, update):
+    update.callback_query.answer()
     if update.callback_query.data == "refresh":
         send(bot)
         logger.info(
             "Update - {} - {}".format(update.callback_query.from_user.first_name, update.callback_query.from_user.id))
-    update.callback_query.answer()
 
 
 def main():
