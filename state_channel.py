@@ -1,7 +1,7 @@
 import logging
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from telegram.bot import Bot
 from telegram.ext.callbackqueryhandler import CallbackQueryHandler
@@ -24,11 +24,13 @@ logger = logging.getLogger(__name__)
 def parse_message():
     text = []
     db = mongo.get_db()
-    state = {state['_id']: state['last']['state'] for state in mongo.get_last(db)}
+    state = {state['_id']: [state['last']['state'], state['last']['timestamp']] for state in mongo.get_last(db)}
+    now = datetime.utcnow()
     for group, x in sorted(mongo.get_names(db).items()):
         text.append("\n*{}*".format(group))
         for s_id, name in sorted(x.items(), key=lambda x: x[1][0]):
-            text.append("{} {}".format("🔴" if state[s_id] else "🔵", name[0]))
+            name = "*{}*".format(name[0]) if (state[s_id][1] + timedelta(minutes=1)) > now else name[0]
+            text.append("{} {}".format("🔴" if state[s_id][0] else "🔵", name))
     text.append("\n_Aktualisiert: {}_".format(datetime.strftime(datetime.now(), "%Y-%m-%d %H:%M:%S")))
     return "\n".join(text)
 
@@ -41,7 +43,7 @@ def send(bot=None):
     if not bot:
         bot = Bot(TELEGRAM["token"])
     bot.edit_message_text(chat_id=TELEGRAM["chat_id"], message_id=TELEGRAM["msg_id"], text=parse_message(),
-                     parse_mode=ParseMode.MARKDOWN, reply_markup=get_keyboard())
+                          parse_mode=ParseMode.MARKDOWN, reply_markup=get_keyboard())
 
 
 def answer_callback(bot, update):
