@@ -38,7 +38,7 @@ class BasicMongo:
 
     @staticmethod
     def get_sensors(db):
-        return sorted(db.sensors.find({}), key=lambda x: (x['groups'][0] if x['groups'] else x['name'], x['name']))
+        return sorted(db.sensors.find({'type':{'$in':['ZHAOpenClose', 'ZHAPresence']}}), key=lambda x: (x['groups'][0] if x['groups'] else x['name'], x['name']))
 
     @staticmethod
     def get_groups(db):
@@ -76,7 +76,12 @@ class BasicMongo:
     @staticmethod
     def get_db():
         client = MongoClient(MONGO['HOST'], MONGO['PORT'])
-        return client.alarm_system
+        return client.smart_home
+
+    @staticmethod
+    def get_smart_home_db():
+        client = MongoClient(MONGO['HOST'], MONGO['PORT'])
+        return client.smart_home
 
     @staticmethod
     def key_exists(db, d_id, k):

@@ -78,6 +78,10 @@ def get_sensor_list(data="sensor.", chat_data=None):
     for v in mongo.get_sensors(mongo.get_db()):
         group = v['groups'][0] + " - " if v['groups'] else ""
         text = ("❌ " if "activate" in chat_data and v['deconz_id'] in chat_data["activate"] else "") + group + v['name']
+        if v['type'] == 'ZHAOpenClose':
+            text += ' 🚪'
+        elif v['type'] == 'ZHAPresence':
+            text += ' 🚶‍♀️'
         result += [[InlineKeyboardButton(text, callback_data=data + v['deconz_id'])]]
     if data == "arm.":
         for i, n in mongo.get_groups(mongo.get_db()).items():
@@ -92,22 +96,36 @@ def get_sensor_list(data="sensor.", chat_data=None):
 
 
 def get_sensors_text(chat_data):
-    m = mongo.get_sensors(mongo.get_db())
+    mongo_sensors = mongo.get_sensors(mongo.get_db())
     text = "*Alarm für diese Sensoren aktivieren*\n"
-    return text + "\n".join(["- " + (v['groups'][0] + ": " if v['groups'] else "") + v['name'] for v in m if
-                             v['deconz_id'] in chat_data['activate']])
+    motion = []
+    openclose = []
+    for sensor in mongo_sensors:
+        if sensor['deconz_id'] in chat_data['activate']:
+            sensor_text = "- " + (sensor['groups'][0] + ": " if sensor['groups'] else "") + sensor['name']
+            if sensor['type'] == "ZHAOpenClose":
+                openclose.append(sensor_text)
+            elif sensor['type'] == "ZHAPresence":
+                motion.append(sensor_text)
+    if motion:
+        text += "\nBewegungsmelder:\n" + "\n".join(motion) + "\n"
+    if openclose:
+        text += "\nTür- und Fenstersensoren:\n" + "\n".join(openclose) + "\n"
+    return text
 
 
 def get_sensor_info(sensor, chat_data):
     magnet = Magnet()
     s = magnet.get_sensor(sensor)
     chat_data['name'] = s['name']
-    groups = mongo.get_one_sensor(mongo.get_db(), sensor)['groups']
+    m = mongo.get_one_sensor(mongo.get_db(), sensor)
+    groups = m['groups']
+    unit = m['unit']
     status = ['geschlossen', 'offen ⚠️']
     battery = "{}%{}".format(int(s['config']['battery']), "" if int(s['config']['battery']) > 20 else " ⚠️")
     txt = "*{}*\nStatus: {}\nErreichbar: {}\nLetzter Kontakt: _{}_\nBatterie: {}\nTemperatur: {}°C\nTyp: _{}_\nID: `{}`"
     txt += "\nHauptgruppe: _{}_"
-    return txt.format(s['name'], status[int(s['state']['open'])], "✔️" if s['config']['reachable'] else "❌",
+    return txt.format(s['name'], status[int(s['state'][unit])], "✔️" if s['config']['reachable'] else "❌",
                       get_local_time(s['state']['lastupdated']), battery, s['config']['temperature'] / 100,
                       s['type'], s['uniqueid'], groups[0] if groups else "➖")
 
